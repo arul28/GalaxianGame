@@ -22,6 +22,10 @@ var uColorULoc;
 var spaceshipModel = {};
 var alienModels = [];
 
+// Input state variables
+var keysPressed = {};
+var spaceshipSpeed = 0.05; // Adjust the speed as needed
+
 // Set up WebGL environment
 function setupWebGL() {
   // Get the canvas and context
@@ -306,7 +310,7 @@ function createSpaceshipModel() {
 
   spaceshipModel.indexCount = indices.length;
   spaceshipModel.color = [0.0, 1.0, 0.0, 1.0]; // Green color
-  spaceshipModel.position = vec3.fromValues(0.0, -2.0, -1.0); // Spaceship position
+  spaceshipModel.position = vec3.fromValues(0.0, -2.4, -0.8); // Spaceship position
 }
 
 // Create alien models as cubes with normals
@@ -492,10 +496,10 @@ function createAlienModels() {
   // Create aliens in a grid
   var rows = 2;
   var cols = 6;
-  var spacingX = 1.2; // Increased spacing to accommodate larger cubes
-  var spacingY = 1.2;
+  var spacingX = 1.0; // Increased spacing to accommodate larger cubes
+  var spacingY = 1.0;
   var startX = -((cols - 1) * spacingX) / 2;
-  var startY = 2.0; // Aliens positioned higher up
+  var startY = 2.5; // Aliens positioned higher up
 
   for (var i = 0; i < rows; i++) {
     for (var j = 0; j < cols; j++) {
@@ -607,12 +611,32 @@ function renderModel(model, pvMatrix) {
   gl.drawElements(gl.TRIANGLES, model.indexCount, gl.UNSIGNED_SHORT, 0);
 }
 
+// Set up event handlers for keyboard input
+function setupEventHandlers() {
+  window.addEventListener(
+    "keydown",
+    function (event) {
+      keysPressed[event.key] = true;
+    },
+    false
+  );
+
+  window.addEventListener(
+    "keyup",
+    function (event) {
+      keysPressed[event.key] = false;
+    },
+    false
+  );
+}
+
 // Main function
 function main() {
   setupWebGL();
   setupShaders();
   createSpaceshipModel();
   createAlienModels();
+  setupEventHandlers(); // Added to set up keyboard input
 
   // Start the rendering loop
   requestAnimationFrame(animate);
@@ -620,6 +644,24 @@ function main() {
 
 // Animation loop
 function animate() {
+  // Handle input
+  if (keysPressed["ArrowRight"]) {
+    spaceshipModel.position[0] -= spaceshipSpeed;
+  }
+  if (keysPressed["ArrowLeft"]) {
+    spaceshipModel.position[0] += spaceshipSpeed;
+  }
+
+  // Limit the spaceship's movement to the screen bounds
+  var leftLimit = -3.5; // Adjust these values based on your scene
+  var rightLimit = 3.5;
+  if (spaceshipModel.position[0] < leftLimit) {
+    spaceshipModel.position[0] = leftLimit;
+  }
+  if (spaceshipModel.position[0] > rightLimit) {
+    spaceshipModel.position[0] = rightLimit;
+  }
+
   renderModels();
   requestAnimationFrame(animate);
 }
