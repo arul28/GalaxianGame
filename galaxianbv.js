@@ -1,14 +1,14 @@
 /* GLOBAL CONSTANTS AND VARIABLES */
 
 /* Game-specific globals */
-var gl = null;
+var gl = null; // The WebGL context
 
 // View parameters
-var Eye = vec3.fromValues(0.0, 0.0, -7.0); // camera position
-var Center = vec3.fromValues(0.0, 0.0, 0.0);
-var Up = vec3.fromValues(0.0, 1.0, 0.0);
+var Eye = vec3.fromValues(0.0, 0.0, -7.0); // Camera position
+var Center = vec3.fromValues(0.0, 0.0, 0.0); // Where the camera is looking
+var Up = vec3.fromValues(0.0, 1.0, 0.0); // Up vector
 
-// shader attribute and uniform locations
+// Shader attribute and uniform locations
 var shaderProgram;
 var vPosAttribLoc;
 var vNormAttribLoc;
@@ -18,62 +18,60 @@ var normalMatrixULoc;
 var lightPositionULoc;
 var uColorULoc;
 
-var hardMode = false;
-var backgroundImageSrc = "sky.png"; // initial background for easy mode
+// Alien movement variables
+var alienDirection = 1; // 1 for right, -1 for left
+var alienSpeed = 0.02; // Adjust the speed as needed
+var alienLeftLimit = -3.0; // Left boundary for aliens
+var alienRightLimit = 3.0; // Right boundary for aliens
 
-// alien movement
-var alienDirection = 1;
-var alienSpeed = 0.02;
-var alienLeftLimit = -3.0;
-var alienRightLimit = 3.0;
-
-// alien color
-var colorChangeInterval = 3000; // in ms
+// Alien color change variables
+var colorChangeInterval = 3000; // Time in milliseconds (3000 ms = 3 seconds)
 var lastColorChangeTime = 0;
-var currentAlienColor = [1.0, 0.0, 0.0, 1.0]; // red
-var alternateAlienColor = [0.0, 0.0, 1.0, 1.0]; // blue
+var currentAlienColor = [1.0, 0.0, 0.0, 1.0]; // Start with red
+var alternateAlienColor = [0.0, 0.0, 1.0, 1.0]; // Blue color
 
-// alien descent
+// Alien descent variables
 var lastDescentTime = 0;
-var descentInterval = 5000; // in ms
-var descentGap = 1000; // time between descending aliens
-var descendingAliens = [];
+var descentInterval = 5000; // Time between descents in milliseconds
+var descentGap = 1000; // Time between consecutive descending aliens (1 second)
+var descendingAliens = []; // Array to keep track of descending aliens
 
-var lowerRowY = 1.5;
+var lowerRowY = 1.5; // Y-position of the lower row of aliens
 
+// Game over flag
 var gameOverFlag = false;
 
-// bullets
-var spaceshipShot = null;
-var shotSpeed = 0.1; // bullet speed
+// Spaceship projectile variables
+var spaceshipShot = null; // Holds the projectile model when shot
+var shotSpeed = 0.1; // Speed at which the shot moves upwards
 
-// alien bullets
-var alienProjectiles = [];
-var alienProjectileSpeed = 0.08; // speed of alien projectiles, greater than alien's descent speed
+// Alien projectile variables
+var alienProjectiles = []; // Array to hold all alien projectiles
+var alienProjectileSpeed = 0.08; // Speed of alien projectiles (greater than alien's descent speed)
 
+// Model data
 var spaceshipModel = {};
 var alienModels = [];
 
-// input state
+// Input state variables
 var keysPressed = {};
-var spaceshipSpeed = 0.05;
+var spaceshipSpeed = 0.05; // Adjust the speed as needed
 
 function setupBackground() {
   var imageCanvas = document.getElementById("myImageCanvas");
   var imageContext = imageCanvas.getContext("2d");
 
-  // clear the canvas
-  imageContext.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
-
   var bgImg = new Image();
-  bgImg.src = backgroundImageSrc;
+  bgImg.src = "sky.png"; // Ensure this image is in the same directory or correct path
   bgImg.onload = function () {
+    // Once the image loads, draw it to fill the entire canvas
     imageContext.drawImage(bgImg, 0, 0, imageCanvas.width, imageCanvas.height);
   };
 }
 
 function setupWebGL() {
   var canvas = document.getElementById("myWebGLCanvas");
+  // Request alpha channel
   gl = canvas.getContext("webgl", { alpha: true });
 
   try {
@@ -84,16 +82,16 @@ function setupWebGL() {
       gl.enable(gl.DEPTH_TEST);
       gl.depthFunc(gl.LEQUAL);
 
-      // clear with transparent background
+      // Clear with transparent background
       gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.clearColor(0.0, 0.0, 0.0, 0.0); //  0.0 for transparency
+      gl.clearColor(0.0, 0.0, 0.0, 0.0); // alpha = 0.0 for transparency
     }
   } catch (e) {
     console.log(e);
   }
 }
 
-// set up shaders
+// Set up shaders
 function setupShaders() {
   var vShaderCode = `
     attribute vec3 aVertexPosition;
@@ -139,7 +137,7 @@ function setupShaders() {
     }
   `;
 
-  // compilw vertex shader
+  // Compile vertex shader
   var vShader = gl.createShader(gl.VERTEX_SHADER);
   gl.shaderSource(vShader, vShaderCode);
   gl.compileShader(vShader);
@@ -152,7 +150,7 @@ function setupShaders() {
     return;
   }
 
-  // compile fragment shader
+  // Compile fragment shader
   var fShader = gl.createShader(gl.FRAGMENT_SHADER);
   gl.shaderSource(fShader, fShaderCode);
   gl.compileShader(fShader);
@@ -165,7 +163,7 @@ function setupShaders() {
     return;
   }
 
-  // create shader program
+  // Create shader program
   shaderProgram = gl.createProgram();
   gl.attachShader(shaderProgram, vShader);
   gl.attachShader(shaderProgram, fShader);
@@ -178,8 +176,10 @@ function setupShaders() {
     return;
   }
 
+  // Use the shader program
   gl.useProgram(shaderProgram);
 
+  // Get attribute and uniform locations
   vPosAttribLoc = gl.getAttribLocation(shaderProgram, "aVertexPosition");
   gl.enableVertexAttribArray(vPosAttribLoc);
 
@@ -193,54 +193,157 @@ function setupShaders() {
   uColorULoc = gl.getUniformLocation(shaderProgram, "uColor");
 }
 
-// making spaceship model as a pyramid
+// Create spaceship model as a pyramid with normals
 function createSpaceshipModel() {
+  // Define positions and normals for a pyramid with flat shading
   var positions = [
-    // bottom
-    -0.1, -0.1, 0.1, 0.1, -0.1, 0.1, 0.1, -0.1, -0.1, -0.1, -0.1, -0.1,
+    // Base face (bottom)
+    -0.1,
+    -0.1,
+    0.1, // 0
+    0.1,
+    -0.1,
+    0.1, // 1
+    0.1,
+    -0.1,
+    -0.1, // 2
+    -0.1,
+    -0.1,
+    -0.1, // 3
 
-    -0.1, -0.1, 0.1, 0.1, -0.1, 0.1, 0.0, 0.1, 0.0,
+    // Side face 1
+    -0.1,
+    -0.1,
+    0.1, // 4
+    0.1,
+    -0.1,
+    0.1, // 5
+    0.0,
+    0.1,
+    0.0, // 6
 
-    0.1, -0.1, 0.1, 0.1, -0.1, -0.1, 0.0, 0.1, 0.0,
+    // Side face 2
+    0.1,
+    -0.1,
+    0.1, // 7
+    0.1,
+    -0.1,
+    -0.1, // 8
+    0.0,
+    0.1,
+    0.0, // 9
 
-    0.1, -0.1, -0.1, -0.1, -0.1, -0.1, 0.0, 0.1, 0.0,
+    // Side face 3
+    0.1,
+    -0.1,
+    -0.1, // 10
+    -0.1,
+    -0.1,
+    -0.1, // 11
+    0.0,
+    0.1,
+    0.0, // 12
 
-    -0.1, -0.1, -0.1, -0.1, -0.1, 0.1, 0.0, 0.1, 0.0,
+    // Side face 4
+    -0.1,
+    -0.1,
+    -0.1, // 13
+    -0.1,
+    -0.1,
+    0.1, // 14
+    0.0,
+    0.1,
+    0.0, // 15
   ];
 
   var normals = [
-    0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0,
+    // Base face normal (downward)
+    0.0,
+    -1.0,
+    0.0, // 0
+    0.0,
+    -1.0,
+    0.0, // 1
+    0.0,
+    -1.0,
+    0.0, // 2
+    0.0,
+    -1.0,
+    0.0, // 3
 
-    0.0, 0.7071, 0.7071, 0.0, 0.7071, 0.7071, 0.0, 0.7071, 0.7071,
+    // Side face 1 normal
+    0.0,
+    0.7071,
+    0.7071, // 4
+    0.0,
+    0.7071,
+    0.7071, // 5
+    0.0,
+    0.7071,
+    0.7071, // 6
 
-    0.7071, 0.7071, 0.0, 0.7071, 0.7071, 0.0, 0.7071, 0.7071, 0.0,
+    // Side face 2 normal
+    0.7071,
+    0.7071,
+    0.0, // 7
+    0.7071,
+    0.7071,
+    0.0, // 8
+    0.7071,
+    0.7071,
+    0.0, // 9
 
-    0.0, 0.7071, -0.7071, 0.0, 0.7071, -0.7071, 0.0, 0.7071, -0.7071,
+    // Side face 3 normal
+    0.0,
+    0.7071,
+    -0.7071, // 10
+    0.0,
+    0.7071,
+    -0.7071, // 11
+    0.0,
+    0.7071,
+    -0.7071, // 12
 
-    -0.7071, 0.7071, 0.0, -0.7071, 0.7071, 0.0, -0.7071, 0.7071, 0.0,
+    // Side face 4 normal
+    -0.7071,
+    0.7071,
+    0.0, // 13
+    -0.7071,
+    0.7071,
+    0.0, // 14
+    -0.7071,
+    0.7071,
+    0.0, // 15
   ];
 
   var indices = [
+    // Base face (two triangles)
     0, 1, 2, 0, 2, 3,
 
+    // Side face 1
     4, 5, 6,
 
+    // Side face 2
     7, 8, 9,
 
+    // Side face 3
     10, 11, 12,
 
+    // Side face 4
     13, 14, 15,
   ];
 
-  // create and bind position buffer
+  // Create and bind position buffer
   spaceshipModel.vertexBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, spaceshipModel.vertexBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
+  // Create and bind normal buffer
   spaceshipModel.normalBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, spaceshipModel.normalBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
 
+  // Create and bind index buffer
   spaceshipModel.indexBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, spaceshipModel.indexBuffer);
   gl.bufferData(
@@ -250,63 +353,203 @@ function createSpaceshipModel() {
   );
 
   spaceshipModel.indexCount = indices.length;
-  spaceshipModel.color = [0.0, 1.0, 0.0, 1.0]; // green
-  spaceshipModel.position = vec3.fromValues(0.0, -2.4, -0.8);
+  spaceshipModel.color = [0.0, 1.0, 0.0, 1.0]; // Green color
+  spaceshipModel.position = vec3.fromValues(0.0, -2.4, -0.8); // Spaceship position
 }
 
+// Create alien models as cubes with normals
 function createAlienModels() {
+  // Define positions and normals for a cube with flat shading
   var positions = [
-    // front face
-    -0.1, -0.1, 0.1, 0.1, -0.1, 0.1, 0.1, 0.1, 0.1, -0.1, 0.1, 0.1,
-    // back face
-    -0.1, -0.1, -0.1, 0.1, -0.1, -0.1, 0.1, 0.1, -0.1, -0.1, 0.1, -0.1,
-    // top face
-    -0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -0.1, -0.1, 0.1, -0.1,
-    // bottom face
-    -0.1, -0.1, 0.1, 0.1, -0.1, 0.1, 0.1, -0.1, -0.1, -0.1, -0.1, -0.1,
-    // right face
-    0.1, -0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -0.1, 0.1, -0.1, -0.1,
-    // left face
-    -0.1, -0.1, 0.1, -0.1, 0.1, 0.1, -0.1, 0.1, -0.1, -0.1, -0.1, -0.1,
+    // Front face
+    -0.1,
+    -0.1,
+    0.1, // 0
+    0.1,
+    -0.1,
+    0.1, // 1
+    0.1,
+    0.1,
+    0.1, // 2
+    -0.1,
+    0.1,
+    0.1, // 3
+    // Back face
+    -0.1,
+    -0.1,
+    -0.1, // 4
+    0.1,
+    -0.1,
+    -0.1, // 5
+    0.1,
+    0.1,
+    -0.1, // 6
+    -0.1,
+    0.1,
+    -0.1, // 7
+    // Top face
+    -0.1,
+    0.1,
+    0.1, // 8
+    0.1,
+    0.1,
+    0.1, // 9
+    0.1,
+    0.1,
+    -0.1, // 10
+    -0.1,
+    0.1,
+    -0.1, // 11
+    // Bottom face
+    -0.1,
+    -0.1,
+    0.1, // 12
+    0.1,
+    -0.1,
+    0.1, // 13
+    0.1,
+    -0.1,
+    -0.1, // 14
+    -0.1,
+    -0.1,
+    -0.1, // 15
+    // Right face
+    0.1,
+    -0.1,
+    0.1, // 16
+    0.1,
+    0.1,
+    0.1, // 17
+    0.1,
+    0.1,
+    -0.1, // 18
+    0.1,
+    -0.1,
+    -0.1, // 19
+    // Left face
+    -0.1,
+    -0.1,
+    0.1, // 20
+    -0.1,
+    0.1,
+    0.1, // 21
+    -0.1,
+    0.1,
+    -0.1, // 22
+    -0.1,
+    -0.1,
+    -0.1, // 23
   ];
 
   var normals = [
-    0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0,
-    0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0,
-
-    0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0,
-    0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
-    0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0,
-    0.0, 0.0, -1.0, 0.0, 0.0,
+    // Front face normals
+    0.0,
+    0.0,
+    1.0, // 0
+    0.0,
+    0.0,
+    1.0, // 1
+    0.0,
+    0.0,
+    1.0, // 2
+    0.0,
+    0.0,
+    1.0, // 3
+    // Back face normals
+    0.0,
+    0.0,
+    -1.0, // 4
+    0.0,
+    0.0,
+    -1.0, // 5
+    0.0,
+    0.0,
+    -1.0, // 6
+    0.0,
+    0.0,
+    -1.0, // 7
+    // Top face normals
+    0.0,
+    1.0,
+    0.0, // 8
+    0.0,
+    1.0,
+    0.0, // 9
+    0.0,
+    1.0,
+    0.0, // 10
+    0.0,
+    1.0,
+    0.0, // 11
+    // Bottom face normals
+    0.0,
+    -1.0,
+    0.0, // 12
+    0.0,
+    -1.0,
+    0.0, // 13
+    0.0,
+    -1.0,
+    0.0, // 14
+    0.0,
+    -1.0,
+    0.0, // 15
+    // Right face normals
+    1.0,
+    0.0,
+    0.0, // 16
+    1.0,
+    0.0,
+    0.0, // 17
+    1.0,
+    0.0,
+    0.0, // 18
+    1.0,
+    0.0,
+    0.0, // 19
+    // Left face normals
+    -1.0,
+    0.0,
+    0.0, // 20
+    -1.0,
+    0.0,
+    0.0, // 21
+    -1.0,
+    0.0,
+    0.0, // 22
+    -1.0,
+    0.0,
+    0.0, // 23
   ];
 
   var indices = [
-    // front face
+    // Front face
     0, 1, 2, 0, 2, 3,
-    // back face
+    // Back face
     4, 5, 6, 4, 6, 7,
-    // top face
+    // Top face
     8, 9, 10, 8, 10, 11,
-    // bottom face
+    // Bottom face
     12, 13, 14, 12, 14, 15,
-    // right face
+    // Right face
     16, 17, 18, 16, 18, 19,
-    // ;eft face
+    // Left face
     20, 21, 22, 20, 22, 23,
   ];
 
-  // make aliens in a grid
+  // Create aliens in a grid
   var rows = 2;
   var cols = 6;
-  var spacingX = 1.0;
+  var spacingX = 1.0; // Increased spacing to accommodate larger cubes
   var spacingY = 1.0;
   var startX = -((cols - 1) * spacingX) / 2;
-  var startY = 2.5;
+  var startY = 2.5; // Aliens positioned higher up
 
   for (var i = 0; i < rows; i++) {
     for (var j = 0; j < cols; j++) {
       var alien = {};
 
+      // Create and bind position buffer
       alien.vertexBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, alien.vertexBuffer);
       gl.bufferData(
@@ -315,10 +558,12 @@ function createAlienModels() {
         gl.STATIC_DRAW
       );
 
+      // Create and bind normal buffer
       alien.normalBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, alien.normalBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
 
+      // Create and bind index buffer
       alien.indexBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, alien.indexBuffer);
       gl.bufferData(
@@ -328,13 +573,14 @@ function createAlienModels() {
       );
 
       alien.indexCount = indices.length;
-      alien.color = currentAlienColor;
+      alien.color = currentAlienColor; // Use currentAlienColor
 
       var xPos = startX + j * spacingX;
       var yPos = startY - i * spacingY;
       alien.position = vec3.fromValues(xPos, yPos, 0.0);
-      alien.originalPosition = vec3.clone(alien.position);
+      alien.originalPosition = vec3.clone(alien.position); // Store original position
 
+      // Add descending properties
       alien.isDescending = false;
       alien.descendStartTime = 0;
       alien.sinAmplitude = 0;
@@ -344,64 +590,70 @@ function createAlienModels() {
   }
 }
 
+// Create projectile model
 function createProjectileModel(color) {
+  // Define positions and normals for a small cube
   var positions = [
-    // ftonr face
+    // Front face
     -0.05, -0.05, 0.05, 0.05, -0.05, 0.05, 0.05, 0.05, 0.05, -0.05, 0.05, 0.05,
-    // back face
+    // Back face
     -0.05, -0.05, -0.05, 0.05, -0.05, -0.05, 0.05, 0.05, -0.05, -0.05, 0.05,
     -0.05,
-    // ;eft face
+    // Left face
     -0.05, -0.05, -0.05, -0.05, -0.05, 0.05, -0.05, 0.05, 0.05, -0.05, 0.05,
     -0.05,
-    // right face
+    // Right face
     0.05, -0.05, -0.05, 0.05, -0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, -0.05,
-    // top face
+    // Top face
     -0.05, 0.05, -0.05, -0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, -0.05,
-    // bottom face
+    // Bottom face
     -0.05, -0.05, -0.05, -0.05, -0.05, 0.05, 0.05, -0.05, 0.05, 0.05, -0.05,
     -0.05,
   ];
 
   var normals = [
+    // Front face normals
     0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
-
+    // Back face normals
     0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0,
-
+    // Left face normals
     -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0,
-
+    // Right face normals
     1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0,
-
+    // Top face normals
     0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
-
+    // Bottom face normals
     0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0,
   ];
 
   var indices = [
-    // front face
+    // Front face
     0, 1, 2, 0, 2, 3,
-    // back face
+    // Back face
     4, 5, 6, 4, 6, 7,
-    // left face
+    // Left face
     8, 9, 10, 8, 10, 11,
-    // right face
+    // Right face
     12, 13, 14, 12, 14, 15,
-    // top face
+    // Top face
     16, 17, 18, 16, 18, 19,
-    // bottom face
+    // Bottom face
     20, 21, 22, 20, 22, 23,
   ];
 
   var projectile = {};
 
+  // Create and bind position buffer
   projectile.vertexBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, projectile.vertexBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
+  // Create and bind normal buffer
   projectile.normalBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, projectile.normalBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
 
+  // Create and bind index buffer
   projectile.indexBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, projectile.indexBuffer);
   gl.bufferData(
@@ -411,12 +663,13 @@ function createProjectileModel(color) {
   );
 
   projectile.indexCount = indices.length;
-  projectile.color = color;
-  projectile.position = vec3.create();
+  projectile.color = color; // Use the specified color
+  projectile.position = vec3.create(); // Will set when shot
 
   return projectile;
 }
 
+// Render models
 function renderModels() {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -433,36 +686,37 @@ function renderModels() {
   mat4.lookAt(vMatrix, Eye, Center, Up);
   mat4.multiply(pvMatrix, pMatrix, vMatrix);
 
-  // render spaceship
+  // Render spaceship
   renderModel(spaceshipModel, pvMatrix);
 
-  // render aliens
+  // Render aliens
   for (var i = 0; i < alienModels.length; i++) {
     renderModel(alienModels[i], pvMatrix);
   }
 
-  // render spaceship shot if it exists
+  // Render spaceship shot if it exists
   if (spaceshipShot !== null) {
     renderModel(spaceshipShot, pvMatrix);
   }
 
-  // render alien projectiles
+  // Render alien projectiles
   for (var i = 0; i < alienProjectiles.length; i++) {
     renderModel(alienProjectiles[i], pvMatrix);
   }
 
-  // check for errors
+  // Check for errors
   var error = gl.getError();
   if (error !== gl.NO_ERROR) {
     console.error("WebGL Error:", error);
   }
 }
 
+// Render a single model
 function renderModel(model, pvMatrix) {
   var mMatrix = mat4.create();
   mat4.translate(mMatrix, mMatrix, model.position);
 
-  // adjust scaling
+  // Adjust scaling based on the model
   if (model === spaceshipModel) {
     mat4.scale(mMatrix, mMatrix, vec3.fromValues(2.5, 2.5, 2.5));
   } else if (alienModels.includes(model)) {
@@ -476,43 +730,43 @@ function renderModel(model, pvMatrix) {
   var pvmMatrix = mat4.create();
   mat4.multiply(pvmMatrix, pvMatrix, mMatrix);
 
-  // calculate normal matrix
+  // Calculate normal matrix
   var normalMatrix = mat3.create();
   mat3.normalFromMat4(normalMatrix, mMatrix);
 
+  // Bind position buffer and set attribute
   gl.bindBuffer(gl.ARRAY_BUFFER, model.vertexBuffer);
   gl.vertexAttribPointer(vPosAttribLoc, 3, gl.FLOAT, false, 0, 0);
 
+  // Bind normal buffer and set attribute
   gl.bindBuffer(gl.ARRAY_BUFFER, model.normalBuffer);
   gl.vertexAttribPointer(vNormAttribLoc, 3, gl.FLOAT, false, 0, 0);
 
-  // set uniforms
+  // Set uniforms
   gl.uniformMatrix4fv(mMatrixULoc, false, mMatrix);
   gl.uniformMatrix4fv(pvmMatrixULoc, false, pvmMatrix);
   gl.uniformMatrix3fv(normalMatrixULoc, false, normalMatrix);
-  gl.uniform3fv(lightPositionULoc, [2.0, 5.0, -3.0]);
+  gl.uniform3fv(lightPositionULoc, [2.0, 5.0, -3.0]); // Light position
   gl.uniform4fv(uColorULoc, model.color);
 
+  // Bind the index buffer and draw elements
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, model.indexBuffer);
   gl.drawElements(gl.TRIANGLES, model.indexCount, gl.UNSIGNED_SHORT, 0);
 }
 
+// Set up event handlers for keyboard input
 function setupEventHandlers() {
   window.addEventListener(
     "keydown",
     function (event) {
       keysPressed[event.key] = true;
 
-      // shoot with space
+      // Handle space bar press
       if (event.key === " " && spaceshipShot === null) {
-        spaceshipShot = createProjectileModel([1.0, 1.0, 0.0, 1.0]);
+        // Shoot a projectile
+        spaceshipShot = createProjectileModel([1.0, 1.0, 0.0, 1.0]); // Yellow color
         vec3.copy(spaceshipShot.position, spaceshipModel.position);
-        spaceshipShot.position[1] += 0.3;
-      }
-
-      // ! toggle
-      if (event.key === "!") {
-        switchModes();
+        spaceshipShot.position[1] += 0.3; // Position the shot above the spaceship
       }
     },
     false
@@ -527,60 +781,68 @@ function setupEventHandlers() {
   );
 }
 
+// Function to start an alien descent
 function startAlienDescent(currentTime) {
-  // find aliens that are not descending
+  // Find aliens that are not descending
   var availableAliens = alienModels.filter((alien) => !alien.isDescending);
 
   if (availableAliens.length > 0) {
-    // randomly select an alien
+    // Randomly select an alien
     var index = Math.floor(Math.random() * availableAliens.length);
     var alien = availableAliens[index];
 
-    // set descending properties
+    // Set descending properties
     alien.isDescending = true;
     alien.descendStartTime = currentTime;
-    alien.sinAmplitude = Math.random() * 0.5 + 0.5; // amplitude between 0.5 and 1.0
+    alien.sinAmplitude = Math.random() * 0.5 + 0.5; // Amplitude between 0.5 and 1.0
     alien.hasStartedShooting = false;
 
-    // add to descending aliens list
+    // Add to descending aliens list
     descendingAliens.push(alien);
   }
 }
 
+// Function to update descending aliens
 function updateDescendingAliens(currentTime) {
-  var descentSpeed = 0.04;
-  var frequency = 2.0;
+  var descentSpeed = 0.04; // Adjust descent speed as needed
+  var frequency = 2.0; // Frequency for sinusoidal movement
 
   for (var i = descendingAliens.length - 1; i >= 0; i--) {
     var alien = descendingAliens[i];
 
+    // Store previous position before updating
     var prevPosition = vec3.clone(alien.position);
 
+    // Update vertical position
     alien.position[1] -= descentSpeed;
 
-    var elapsedTime = (currentTime - alien.descendStartTime) / 1000; // convert to seconds
+    // Update horizontal position with sinusoidal movement
+    var elapsedTime = (currentTime - alien.descendStartTime) / 1000; // Convert to seconds
     alien.position[0] +=
       alien.sinAmplitude * Math.sin(frequency * elapsedTime) * 0.02;
 
-    // check if alien has passed below lower row and hasn't started shooting
+    // Check if alien has passed below lower row and hasn't started shooting
     if (!alien.hasStartedShooting && alien.position[1] <= lowerRowY) {
       alien.hasStartedShooting = true;
 
+      // Compute the alien's trajectory slope
       var dx = alien.position[0] - prevPosition[0];
       var dy = alien.position[1] - prevPosition[1];
       var slope = dy !== 0 ? dx / dy : 0;
       var projectileSlope = -slope;
 
+      // Start shooting three projectiles
       shootAlienProjectiles(alien, projectileSlope);
     }
 
-    // check collision with spaceship
+    // Check for collision with spaceship
     if (checkCollision(alien, spaceshipModel)) {
+      // Handle collision (game over)
       gameOver();
-      return; // exit the animation loop
+      return; // Exit the animation loop
     }
 
-    // remove alien if it goes off the screen
+    // Remove alien if it goes off-screen
     if (alien.position[1] < -3.0) {
       resetAlienPosition(alien);
       descendingAliens.splice(i, 1);
@@ -588,67 +850,51 @@ function updateDescendingAliens(currentTime) {
   }
 }
 
+// Function to reset alien position after descent
 function resetAlienPosition(alien) {
   alien.isDescending = false;
   alien.hasStartedShooting = false;
   alien.position = vec3.clone(alien.originalPosition);
 }
 
-function resetGameState() {
-  // clear arrays
-  alienModels = [];
-  descendingAliens = [];
-  alienProjectiles = [];
-  spaceshipShot = null;
-
-  // recreate models
-  createSpaceshipModel();
-  createAlienModels();
-}
-
-function switchModes() {
-  hardMode = !hardMode;
-  if (hardMode) {
-    backgroundImageSrc = "space.png";
-    alienSpeed = 0.05; // faster in hard mode
-  } else {
-    backgroundImageSrc = "sky.png";
-    alienSpeed = 0.02; // normal speed
-  }
-
-  setupBackground();
-  resetGameState();
-}
-
+// Function to shoot alien projectiles
 function shootAlienProjectiles(alien, projectileSlope) {
   var numProjectiles = 3;
-  var intervalBetweenShots = hardMode ? 200 : 500; // faster when in hard mode
+  var intervalBetweenShots = 500; // Time in milliseconds between shots
 
   for (let i = 0; i < numProjectiles; i++) {
     setTimeout(function () {
-      var projectile = createProjectileModel([1.0, 0.0, 0.0, 1.0]); // red
+      // Create a projectile
+      var projectile = createProjectileModel([1.0, 0.0, 0.0, 1.0]); // Red color
       vec3.copy(projectile.position, alien.position);
+
+      // Set projectile properties
       projectile.slope = projectileSlope;
       projectile.isAlienProjectile = true;
+
+      // Add to alien projectiles array
       alienProjectiles.push(projectile);
     }, i * intervalBetweenShots);
   }
 }
 
+// Function to update alien projectiles
 function updateAlienProjectiles() {
   for (var i = alienProjectiles.length - 1; i >= 0; i--) {
     var projectile = alienProjectiles[i];
 
-    // update projectile position
+    // Update projectile position
     projectile.position[1] -= alienProjectileSpeed;
     projectile.position[0] += projectile.slope * alienProjectileSpeed;
 
+    // Check for collision with spaceship
     if (checkCollision(projectile, spaceshipModel)) {
+      // Handle collision (game over)
       gameOver();
-      return; // exit the animation loop
+      return; // Exit the animation loop
     }
 
-    // remove projectile if it goes off the screen
+    // Remove projectile if it goes off-screen
     if (
       projectile.position[1] < -3.5 ||
       projectile.position[0] < -4.0 ||
@@ -660,28 +906,32 @@ function updateAlienProjectiles() {
 }
 
 function checkCollision(a, b) {
+  // Determine sizes based on models
   var aSize = null;
   var bSize = null;
 
-  // collision margin
-  var collisionMargin = 0.07;
-  // model a
+  // Collision margin to adjust the collision box sizes
+  var collisionMargin = 0.07; // Adjust this value as needed
+
+  // Determine size for model 'a'
   if (a === spaceshipModel) {
-    var spaceshipWidth = 0.2 * 2.5 - collisionMargin;
-    var spaceshipHeight = 0.2 * 2.5 - collisionMargin;
+    var spaceshipWidth = 0.2 * 2.5 - collisionMargin; // 0.5 - margin
+    var spaceshipHeight = 0.2 * 2.5 - collisionMargin; // 0.5 - margin
     aSize = { width: spaceshipWidth, height: spaceshipHeight };
   } else if (alienModels.includes(a)) {
-    var alienWidth = 0.2 * 2.0 - collisionMargin;
-    var alienHeight = 0.2 * 2.0 - collisionMargin;
+    var alienWidth = 0.2 * 2.0 - collisionMargin; // 0.4 - margin
+    var alienHeight = 0.2 * 2.0 - collisionMargin; // 0.4 - margin
     aSize = { width: alienWidth, height: alienHeight };
   } else if (a === spaceshipShot || alienProjectiles.includes(a)) {
-    var shotWidth = 0.1 * 1.5 - collisionMargin;
-    var shotHeight = 0.1 * 1.5 - collisionMargin;
+    var shotWidth = 0.1 * 1.5 - collisionMargin; // 0.15 - margin
+    var shotHeight = 0.1 * 1.5 - collisionMargin; // 0.15 - margin
     aSize = { width: shotWidth, height: shotHeight };
   } else {
+    // Unrecognized model 'a'
     return false;
   }
 
+  // Determine size for model 'b' (same logic)
   if (b === spaceshipModel) {
     var spaceshipWidth = 0.2 * 2.5 - collisionMargin;
     var spaceshipHeight = 0.2 * 2.5 - collisionMargin;
@@ -695,10 +945,11 @@ function checkCollision(a, b) {
     var shotHeight = 0.1 * 1.5 - collisionMargin;
     bSize = { width: shotWidth, height: shotHeight };
   } else {
+    // Unrecognized model 'b'
     return false;
   }
 
-  // bounding boxes
+  // Calculate bounding boxes
   var aLeft = a.position[0] - aSize.width / 2;
   var aRight = a.position[0] + aSize.width / 2;
   var aBottom = a.position[1] - aSize.height / 2;
@@ -709,14 +960,14 @@ function checkCollision(a, b) {
   var bBottom = b.position[1] - bSize.height / 2;
   var bTop = b.position[1] + bSize.height / 2;
 
-  // check for overlap
+  // Check for overlap
   var xOverlap = aLeft < bRight && aRight > bLeft;
   var yOverlap = aBottom < bTop && aTop > bBottom;
 
   return xOverlap && yOverlap;
 }
 
-// game over function
+// Game over function
 function gameOver() {
   gameOverFlag = true;
   alert("Game Over!");
@@ -729,27 +980,31 @@ function main() {
   createAlienModels();
   setupEventHandlers();
 
+  // Set up the background now
   setupBackground();
 
+  // Start the rendering loop
   requestAnimationFrame(animate);
 }
 
+// Animation loop
 function animate(currentTime) {
-  // handle initial currentTime
+  // Handle initial currentTime
   if (!lastColorChangeTime) {
     lastColorChangeTime = currentTime;
     lastDescentTime = currentTime;
   }
 
-  // handle input
-  if (keysPressed["ArrowRight"]) {
+  // Handle input
+  if (keysPressed["ArrowLeft"]) {
     spaceshipModel.position[0] -= spaceshipSpeed;
   }
-  if (keysPressed["ArrowLeft"]) {
+  if (keysPressed["ArrowRight"]) {
     spaceshipModel.position[0] += spaceshipSpeed;
   }
 
-  var leftLimit = -3.5;
+  // Limit the spaceship's movement to the screen bounds
+  var leftLimit = -3.5; // Adjust these values based on your scene
   var rightLimit = 3.5;
   if (spaceshipModel.position[0] < leftLimit) {
     spaceshipModel.position[0] = leftLimit;
@@ -758,7 +1013,7 @@ function animate(currentTime) {
     spaceshipModel.position[0] = rightLimit;
   }
 
-  // move aliens
+  // Move aliens
   for (var i = 0; i < alienModels.length; i++) {
     var alien = alienModels[i];
     if (!alien.isDescending) {
@@ -766,7 +1021,7 @@ function animate(currentTime) {
     }
   }
 
-  // check if aliens reached the boundaries
+  // Check if aliens reached the boundaries
   var aliensAtLeftLimit = alienModels.some(
     (alien) => !alien.isDescending && alien.position[0] <= alienLeftLimit
   );
@@ -775,14 +1030,17 @@ function animate(currentTime) {
   );
 
   if (aliensAtLeftLimit || aliensAtRightLimit) {
-    alienDirection *= -1;
+    alienDirection *= -1; // Reverse direction
   }
 
+  // Color change logic
   if (currentTime - lastColorChangeTime >= colorChangeInterval) {
+    // Swap colors
     var tempColor = currentAlienColor;
     currentAlienColor = alternateAlienColor;
     alternateAlienColor = tempColor;
 
+    // Update aliens' colors
     for (var i = 0; i < alienModels.length; i++) {
       alienModels[i].color = currentAlienColor;
     }
@@ -790,50 +1048,52 @@ function animate(currentTime) {
     lastColorChangeTime = currentTime;
   }
 
-  // schedule alien descents
+  // Schedule alien descents
   if (currentTime - lastDescentTime >= descentInterval) {
+    // Start first alien descent
     startAlienDescent(currentTime);
+    // Schedule second alien descent after descentGap
     setTimeout(function () {
       startAlienDescent(currentTime + descentGap);
     }, descentGap);
     lastDescentTime = currentTime;
   }
 
-  // update descending aliens
+  // Update descending aliens
   updateDescendingAliens(currentTime);
 
-  // update spaceship shot
+  // Update spaceship shot
   if (spaceshipShot !== null) {
+    // Move the shot upwards
     spaceshipShot.position[1] += shotSpeed;
 
-    // cehck for collisions with aliens
+    // Check for collisions with aliens
     for (var i = 0; i < alienModels.length; i++) {
       var alien = alienModels[i];
       if (checkCollision(spaceshipShot, alien)) {
-        // remove alien from the array
+        // Destroy the alien and remove it from the array
         alienModels.splice(i, 1);
-        i--;
+        i--; // Adjust index due to removal
 
+        // Remove the shot
         spaceshipShot = null;
 
+        // Exit the loop since the shot is destroyed
         break;
       }
     }
 
+    // Remove the shot if it goes off-screen
     if (spaceshipShot !== null && spaceshipShot.position[1] > 3.5) {
       spaceshipShot = null;
     }
   }
 
+  // Update alien projectiles
   updateAlienProjectiles();
 
+  // If game over, do not continue
   if (gameOverFlag) return;
-
-  if (alienModels.length === 0 && !gameOverFlag) {
-    alert("YOU WIN!!!");
-    gameOverFlag = true;
-    return;
-  }
 
   renderModels();
   requestAnimationFrame(animate);
